@@ -1,7 +1,8 @@
+  <img src="damn_twin.jpg" alt="image" style="width: auto; height: 56px;">
 
   # Medical Appointment System
 
-  This is a code bundle for Medical Appointment System. The original project is available at https://www.figma.com/design/WDl49Ovs89NtLRrMlOdM9Z/Medical-Appointment-System.
+  This is a code bundle for Medical Appointment System.
 
   ## Running the code
 
