@@ -56,9 +56,9 @@ export function AdminDashboard() {
     navigate('/');
   };
 
-  const handleAddMedicine = (e: React.FormEvent) => {
+  const handleAddMedicine = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     const newMedicine: Medicine = {
       id: Date.now().toString(),
       name: medName,
@@ -68,15 +68,19 @@ export function AdminDashboard() {
       description: medDescription,
     };
 
-    addMedicine(newMedicine);
-    setIsMedicineDialogOpen(false);
-    
-    // Reset form
-    setMedName('');
-    setMedStock('');
-    setMedUnit('');
-    setMedCategory('');
-    setMedDescription('');
+    try {
+      await addMedicine(newMedicine);
+      setIsMedicineDialogOpen(false);
+
+      // Reset form
+      setMedName('');
+      setMedStock('');
+      setMedUnit('');
+      setMedCategory('');
+      setMedDescription('');
+    } catch (error) {
+      alert('Failed to add medicine. Please try again.');
+    }
   };
 
   const handleEditMedicine = (medicine: Medicine) => {
@@ -89,42 +93,58 @@ export function AdminDashboard() {
     setIsEditMedicineDialogOpen(true);
   };
 
-  const handleUpdateMedicine = (e: React.FormEvent) => {
+  const handleUpdateMedicine = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (editingMedicine) {
-      updateMedicine(editingMedicine.id, {
-        name: medName,
-        stock: parseInt(medStock),
-        unit: medUnit,
-        category: medCategory,
-        description: medDescription,
-      });
-      setIsEditMedicineDialogOpen(false);
-      setEditingMedicine(null);
-      
-      // Reset form
-      setMedName('');
-      setMedStock('');
-      setMedUnit('');
-      setMedCategory('');
-      setMedDescription('');
+      try {
+        await updateMedicine(editingMedicine.id, {
+          name: medName,
+          stock: parseInt(medStock),
+          unit: medUnit,
+          category: medCategory,
+          description: medDescription,
+        });
+        setIsEditMedicineDialogOpen(false);
+        setEditingMedicine(null);
+
+        // Reset form
+        setMedName('');
+        setMedStock('');
+        setMedUnit('');
+        setMedCategory('');
+        setMedDescription('');
+      } catch (error) {
+        alert('Failed to update medicine. Please try again.');
+      }
     }
   };
 
-  const handleDeleteMedicine = (id: string) => {
+  const handleDeleteMedicine = async (id: string) => {
     if (confirm('Are you sure you want to delete this medicine?')) {
-      deleteMedicine(id);
+      try {
+        await deleteMedicine(id);
+      } catch (error) {
+        alert('Failed to delete medicine. Please try again.');
+      }
     }
   };
 
-  const handleUpdateAppointmentStatus = (id: string, status: 'approved' | 'rejected') => {
-    updateAppointment(id, { status });
+  const handleUpdateAppointmentStatus = async (id: string, status: 'approved' | 'rejected') => {
+    try {
+      await updateAppointment(id, { status });
+    } catch (error) {
+      alert('Failed to update appointment. Please try again.');
+    }
   };
 
-  const handleDeleteAppointment = (id: string) => {
+  const handleDeleteAppointment = async (id: string) => {
     if (confirm('Are you sure you want to delete this appointment?')) {
-      deleteAppointment(id);
+      try {
+        await deleteAppointment(id);
+      } catch (error) {
+        alert('Failed to delete appointment. Please try again.');
+      }
     }
   };
 

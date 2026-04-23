@@ -24,7 +24,7 @@ import logo from 'figma:asset/535fbbef6e8afe0ed959cbadbcaf6275e9f332d7.png';
 
 export function StudentDashboard() {
   const navigate = useNavigate();
-  const { currentUser, appointments, medicines, addAppointment, setUserRole } = useApp();
+  const { currentUser, currentStudentId, appointments, medicines, addAppointment, setUserRole } = useApp();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   
   // Form state
@@ -38,12 +38,12 @@ export function StudentDashboard() {
     navigate('/');
   };
 
-  const handleBookAppointment = (e: React.FormEvent) => {
+  const handleBookAppointment = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     const newAppointment = {
       id: Date.now().toString(),
-      studentId: 'STU' + Date.now().toString().slice(-3),
+      studentId: currentStudentId || 'STU' + Date.now().toString().slice(-3),
       studentName: currentUser,
       email,
       reason,
@@ -53,18 +53,24 @@ export function StudentDashboard() {
       createdAt: new Date().toISOString(),
     };
 
-    addAppointment(newAppointment);
-    setIsDialogOpen(false);
-    
-    // Reset form
-    setReason('');
-    setDate('');
-    setTime('');
-    setEmail('');
+    try {
+      await addAppointment(newAppointment);
+      setIsDialogOpen(false);
+
+      // Reset form
+      setReason('');
+      setDate('');
+      setTime('');
+      setEmail('');
+    } catch (error) {
+      alert('Failed to book appointment. Please try again.');
+    }
   };
 
   // Filter appointments for current user
-  const myAppointments = appointments.filter(apt => apt.studentName === currentUser);
+  const myAppointments = appointments.filter(apt =>
+    currentStudentId ? apt.studentId === currentStudentId : apt.studentName === currentUser
+  );
 
   const getStatusIcon = (status: string) => {
     switch (status) {
