@@ -1,4 +1,7 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { projectId, publicAnonKey } from '/utils/supabase/info';
+
+const SERVER_URL = `https://${projectId}.supabase.co/functions/v1/make-server-81b5d14c`;
 
 export interface Medicine {
   id: string;
@@ -26,16 +29,20 @@ interface AppContextType {
   setUserRole: (role: 'student' | 'admin' | null) => void;
   currentUser: string;
   setCurrentUser: (user: string) => void;
+  currentStudentId: string;
+  setCurrentStudentId: (id: string) => void;
   medicines: Medicine[];
   setMedicines: (medicines: Medicine[]) => void;
   appointments: Appointment[];
   setAppointments: (appointments: Appointment[]) => void;
-  addMedicine: (medicine: Medicine) => void;
-  updateMedicine: (id: string, medicine: Partial<Medicine>) => void;
-  deleteMedicine: (id: string) => void;
-  addAppointment: (appointment: Appointment) => void;
-  updateAppointment: (id: string, appointment: Partial<Appointment>) => void;
-  deleteAppointment: (id: string) => void;
+  addMedicine: (medicine: Medicine) => Promise<void>;
+  updateMedicine: (id: string, medicine: Partial<Medicine>) => Promise<void>;
+  deleteMedicine: (id: string) => Promise<void>;
+  addAppointment: (appointment: Appointment) => Promise<void>;
+  updateAppointment: (id: string, appointment: Partial<Appointment>) => Promise<void>;
+  deleteAppointment: (id: string) => Promise<void>;
+  loadMedicines: () => Promise<void>;
+  loadAppointments: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -135,31 +142,265 @@ const initialAppointments: Appointment[] = [
 export function AppProvider({ children }: { children: ReactNode }) {
   const [userRole, setUserRole] = useState<'student' | 'admin' | null>(null);
   const [currentUser, setCurrentUser] = useState<string>('');
-  const [medicines, setMedicines] = useState<Medicine[]>(initialMedicines);
-  const [appointments, setAppointments] = useState<Appointment[]>(initialAppointments);
+  const [currentStudentId, setCurrentStudentId] = useState<string>('');
+  const [medicines, setMedicines] = useState<Medicine[]>([]);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
 
-  const addMedicine = (medicine: Medicine) => {
-    setMedicines(prev => [...prev, medicine]);
+  // Load medicines from server
+  const loadMedicines = async () => {
+    try {
+      const response = await fetch(`${SERVER_URL}/medicines`, {
+        headers: {
+          'Authorization': `Bearer ${publicAnonKey}`
+        }
+      });
+
+      if (response.status === 404) {
+        console.warn('Medicines endpoint not available, using local data');
+        setMedicines(initialMedicines);
+        return;
+      }
+
+      if (response.ok) {
+        const data = await response.json();
+        // Transform database format to app format
+        const transformedMedicines = data.map((med: any) => ({
+          id: med.id,
+          name: med.medicine_name,
+          stock: med.amount,
+          unit: med.unit,
+          category: 'General', // Default category
+          description: med.description
+        }));
+        setMedicines(transformedMedicines);
+      } else {
+        console.error('Failed to load medicines:', await response.text());
+        setMedicines(initialMedicines);
+      }
+    } catch (error) {
+      console.error('Error loading medicines:', error);
+      setMedicines(initialMedicines);
+    }
   };
 
-  const updateMedicine = (id: string, updatedMedicine: Partial<Medicine>) => {
-    setMedicines(prev => prev.map(med => med.id === id ? { ...med, ...updatedMedicine } : med));
+  // Load appointments from server
+  const loadAppointments = async () => {
+    try {
+      const response = await fetch(`${SERVER_URL}/appointments`, {
+        headers: {
+          'Authorization': `Bearer ${publicAnonKey}`
+        }
+      });
+
+      if (response.status === 404) {
+        console.warn('Appointments endpoint not available, using local data');
+        setAppointments(initialAppointments);
+        return;
+      }
+
+      if (response.ok) {
+        const data = await response.json();
+        // Transform database format to app format
+        const transformedAppointments = data.map((apt: any) => ({
+          id: apt.id,
+          studentId: apt.student_id,
+          studentName: apt.student_name,
+          email: '', // Not stored in database
+          reason: apt.reason,
+          date: apt.appointment_date,
+          time: apt.appointment_time,
+          status: apt.status,
+          createdAt: apt.created_at
+        }));
+        setAppointments(transformedAppointments);
+      } else {
+        console.error('Failed to load appointments:', await response.text());
+        setAppointments(initialAppointments);
+      }
+    } catch (error) {
+      console.error('Error loading appointments:', error);
+      setAppointments(initialAppointments);
+    }
   };
 
-  const deleteMedicine = (id: string) => {
-    setMedicines(prev => prev.filter(med => med.id !== id));
+  // Load data when user role changes
+  useEffect(() => {
+    if (userRole) {
+      loadMedicines();
+      loadAppointments();
+    }
+  }, [userRole]);
+
+  const addMedicine = async (medicine: Medicine) => {
+    try {
+      const response = await fetch(`${SERVER_URL}/medicines`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${publicAnonKey}`
+        },
+        body: JSON.stringify(medicine)
+      });
+
+      if (response.status === 404) {
+        console.warn('Server not deployed, using local storage');
+        setMedicines(prev => [...prev, medicine]);
+        return;
+      }
+
+      if (response.ok) {
+        await loadMedicines(); // Reload to get the server-assigned ID
+      } else {
+        console.error('Failed to add medicine:', await response.text());
+        // Fallback to local
+        setMedicines(prev => [...prev, medicine]);
+      }
+    } catch (error) {
+      console.error('Error adding medicine:', error);
+      // Fallback to local
+      setMedicines(prev => [...prev, medicine]);
+    }
   };
 
-  const addAppointment = (appointment: Appointment) => {
-    setAppointments(prev => [...prev, appointment]);
+  const updateMedicine = async (id: string, updatedMedicine: Partial<Medicine>) => {
+    try {
+      const response = await fetch(`${SERVER_URL}/medicines/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${publicAnonKey}`
+        },
+        body: JSON.stringify(updatedMedicine)
+      });
+
+      if (response.status === 404) {
+        console.warn('Server not deployed, using local storage');
+        setMedicines(prev => prev.map(med => med.id === id ? { ...med, ...updatedMedicine } : med));
+        return;
+      }
+
+      if (response.ok) {
+        await loadMedicines(); // Reload to sync
+      } else {
+        console.error('Failed to update medicine:', await response.text());
+        setMedicines(prev => prev.map(med => med.id === id ? { ...med, ...updatedMedicine } : med));
+      }
+    } catch (error) {
+      console.error('Error updating medicine:', error);
+      setMedicines(prev => prev.map(med => med.id === id ? { ...med, ...updatedMedicine } : med));
+    }
   };
 
-  const updateAppointment = (id: string, updatedAppointment: Partial<Appointment>) => {
-    setAppointments(prev => prev.map(apt => apt.id === id ? { ...apt, ...updatedAppointment } : apt));
+  const deleteMedicine = async (id: string) => {
+    try {
+      const response = await fetch(`${SERVER_URL}/medicines/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${publicAnonKey}`
+        }
+      });
+
+      if (response.status === 404) {
+        console.warn('Server not deployed, using local storage');
+        setMedicines(prev => prev.filter(med => med.id !== id));
+        return;
+      }
+
+      if (response.ok) {
+        await loadMedicines(); // Reload to sync
+      } else {
+        console.error('Failed to delete medicine:', await response.text());
+        setMedicines(prev => prev.filter(med => med.id !== id));
+      }
+    } catch (error) {
+      console.error('Error deleting medicine:', error);
+      setMedicines(prev => prev.filter(med => med.id !== id));
+    }
   };
 
-  const deleteAppointment = (id: string) => {
-    setAppointments(prev => prev.filter(apt => apt.id !== id));
+  const addAppointment = async (appointment: Appointment) => {
+    try {
+      const response = await fetch(`${SERVER_URL}/appointments`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${publicAnonKey}`
+        },
+        body: JSON.stringify(appointment)
+      });
+
+      if (response.status === 404) {
+        console.warn('Server not deployed, using local storage');
+        setAppointments(prev => [...prev, appointment]);
+        return;
+      }
+
+      if (response.ok) {
+        await loadAppointments(); // Reload to get the server-assigned ID
+      } else {
+        console.error('Failed to add appointment:', await response.text());
+        setAppointments(prev => [...prev, appointment]);
+      }
+    } catch (error) {
+      console.error('Error adding appointment:', error);
+      setAppointments(prev => [...prev, appointment]);
+    }
+  };
+
+  const updateAppointment = async (id: string, updatedAppointment: Partial<Appointment>) => {
+    try {
+      const response = await fetch(`${SERVER_URL}/appointments/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${publicAnonKey}`
+        },
+        body: JSON.stringify(updatedAppointment)
+      });
+
+      if (response.status === 404) {
+        console.warn('Server not deployed, using local storage');
+        setAppointments(prev => prev.map(apt => apt.id === id ? { ...apt, ...updatedAppointment } : apt));
+        return;
+      }
+
+      if (response.ok) {
+        await loadAppointments(); // Reload to sync
+      } else {
+        console.error('Failed to update appointment:', await response.text());
+        setAppointments(prev => prev.map(apt => apt.id === id ? { ...apt, ...updatedAppointment } : apt));
+      }
+    } catch (error) {
+      console.error('Error updating appointment:', error);
+      setAppointments(prev => prev.map(apt => apt.id === id ? { ...apt, ...updatedAppointment } : apt));
+    }
+  };
+
+  const deleteAppointment = async (id: string) => {
+    try {
+      const response = await fetch(`${SERVER_URL}/appointments/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${publicAnonKey}`
+        }
+      });
+
+      if (response.status === 404) {
+        console.warn('Server not deployed, using local storage');
+        setAppointments(prev => prev.filter(apt => apt.id !== id));
+        return;
+      }
+
+      if (response.ok) {
+        await loadAppointments(); // Reload to sync
+      } else {
+        console.error('Failed to delete appointment:', await response.text());
+        setAppointments(prev => prev.filter(apt => apt.id !== id));
+      }
+    } catch (error) {
+      console.error('Error deleting appointment:', error);
+      setAppointments(prev => prev.filter(apt => apt.id !== id));
+    }
   };
 
   return (
@@ -169,6 +410,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setUserRole,
         currentUser,
         setCurrentUser,
+        currentStudentId,
+        setCurrentStudentId,
         medicines,
         setMedicines,
         appointments,
@@ -179,6 +422,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         addAppointment,
         updateAppointment,
         deleteAppointment,
+        loadMedicines,
+        loadAppointments,
       }}
     >
       {children}

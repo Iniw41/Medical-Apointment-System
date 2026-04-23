@@ -8,33 +8,154 @@ import { Label } from './ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Stethoscope, User, Shield, CheckCircle } from 'lucide-react';
 import logo from 'figma:asset/535fbbef6e8afe0ed959cbadbcaf6275e9f332d7.png';
+import { projectId, publicAnonKey } from '/utils/supabase/info';
 
 export function LoginPage() {
   const navigate = useNavigate();
-  const { setUserRole, setCurrentUser } = useApp();
+  const { setUserRole, setCurrentUser, setCurrentStudentId } = useApp();
   const [studentId, setStudentId] = useState('');
   const [studentName, setStudentName] = useState('');
   const [adminUsername, setAdminUsername] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleStudentLogin = (e: React.FormEvent) => {
+  const handleStudentLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (studentId && studentName) {
-      setUserRole('student');
-      setCurrentUser(studentName);
-      navigate('/student');
+      setLoading(true);
+      try {
+        const response = await fetch(
+          `https://${projectId}.supabase.co/functions/v1/make-server-81b5d14c/auth/student-login`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${publicAnonKey}`
+            },
+            body: JSON.stringify({
+              studentId,
+              fullName: studentName
+            })
+          }
+        );
+
+        const text = await response.text();
+
+        // If server not deployed (404), use local mode
+        if (response.status === 404) {
+          console.warn('Server not deployed yet, using local mode');
+          setUserRole('student');
+          setCurrentUser(studentName);
+          setCurrentStudentId(studentId);
+          navigate('/student');
+          setLoading(false);
+          return;
+        }
+
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch (parseError) {
+          console.error('Failed to parse response:', text);
+          // Fallback to local mode
+          setUserRole('student');
+          setCurrentUser(studentName);
+          setCurrentStudentId(studentId);
+          navigate('/student');
+          setLoading(false);
+          return;
+        }
+
+        if (response.ok && data.success) {
+          setUserRole('student');
+          setCurrentUser(studentName);
+          setCurrentStudentId(studentId);
+          navigate('/student');
+        } else {
+          console.error('Login error:', data);
+          alert(data.error || 'Login failed');
+        }
+      } catch (error) {
+        console.error('Login error:', error);
+        // Fallback to local mode on network error
+        setUserRole('student');
+        setCurrentUser(studentName);
+        setCurrentStudentId(studentId);
+        navigate('/student');
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
-  const handleAdminLogin = (e: React.FormEvent) => {
+  const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Simple authentication - in production, use proper backend auth
-    if (adminUsername === 'admin' && adminPassword === 'admin123') {
+    setLoading(true);
+
+    // Check credentials first (local validation)
+    if (adminUsername !== 'admin' || adminPassword !== 'admin123') {
+      alert('Invalid credentials. Use username: admin, password: admin123');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/make-server-81b5d14c/auth/admin-login`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${publicAnonKey}`
+          },
+          body: JSON.stringify({
+            username: adminUsername,
+            password: adminPassword
+          })
+        }
+      );
+
+      const text = await response.text();
+
+      // If server not deployed (404), use local mode
+      if (response.status === 404) {
+        console.warn('Server not deployed yet, using local mode');
+        setUserRole('admin');
+        setCurrentUser(adminUsername);
+        navigate('/admin');
+        setLoading(false);
+        return;
+      }
+
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (parseError) {
+        console.error('Failed to parse response:', text);
+        // Fallback to local mode
+        setUserRole('admin');
+        setCurrentUser(adminUsername);
+        navigate('/admin');
+        setLoading(false);
+        return;
+      }
+
+      if (response.ok && data.success) {
+        setUserRole('admin');
+        setCurrentUser(adminUsername);
+        navigate('/admin');
+      } else {
+        console.error('Admin login error:', data);
+        alert(data.error || 'Invalid credentials. Use username: admin, password: admin123');
+      }
+    } catch (error) {
+      console.error('Admin login error:', error);
+      // Fallback to local mode on network error
       setUserRole('admin');
       setCurrentUser(adminUsername);
       navigate('/admin');
-    } else {
-      alert('Invalid credentials. Use username: admin, password: admin123');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -143,8 +264,8 @@ export function LoginPage() {
                       className="h-12 border-2 border-gray-300 focus-visible:ring-[#800000] focus-visible:border-[#800000]"
                     />
                   </div>
-                  <Button type="submit" className="w-full h-12 text-base bg-[#800000] hover:bg-[#600000] text-white">
-                    Access Student Portal
+                  <Button type="submit" className="w-full h-12 text-base bg-[#800000] hover:bg-[#600000] text-white" disabled={loading}>
+                    {loading ? 'Logging in...' : 'Access Student Portal'}
                   </Button>
                 </form>
               </CardContent>
@@ -187,8 +308,8 @@ export function LoginPage() {
                   <div className="text-sm text-gray-500 bg-gray-50 p-3 rounded">
                     Demo credentials: <span className="font-mono">admin</span> / <span className="font-mono">admin123</span>
                   </div>
-                  <Button type="submit" className="w-full h-12 text-base bg-[#B8860B] hover:bg-[#DAA520] text-white">
-                    Access Admin Panel
+                  <Button type="submit" className="w-full h-12 text-base bg-[#B8860B] hover:bg-[#DAA520] text-white" disabled={loading}>
+                    {loading ? 'Logging in...' : 'Access Admin Panel'}
                   </Button>
                 </form>
               </CardContent>
