@@ -1,6 +1,4 @@
 
-  # Medical Appointment System
-
   <img src="damn_twin.jpg" alt="image" style="width: auto; height: 156px;">
 
   # Medical Appointment System
